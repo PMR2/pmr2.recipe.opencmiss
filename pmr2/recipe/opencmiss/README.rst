@@ -52,10 +52,10 @@ We'll start by creating a buildout that uses the recipe::
 
 Running the buildout gives us::
 
-	>>> buildout_output_lower = system(buildout).lower()
-	>>> "installing test1" in buildout_output_lower
-	True
-	>>> "unused options for test1: 'option2' 'option1'" in buildout_output_lower
-	True
+    >>> buildout_output_lower = system(buildout).lower()
+    >>> "installing test1" in buildout_output_lower
+    True
+    >>> "unused options for test1: 'option2' 'option1'" in buildout_output_lower
+    True
 
 
