@@ -55,7 +55,6 @@ setup(name='pmr2.recipe.opencmiss',
       install_requires=['setuptools',
                         'zc.buildout',
                         # -*- Extra requirements: -*-
-                        'zc.recipe.cmmi',
                         ],
       tests_require=tests_require,
       extras_require=dict(tests=tests_require),
