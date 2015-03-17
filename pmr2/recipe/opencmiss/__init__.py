@@ -180,11 +180,14 @@ class Recipe(object):
         system('python setup.py bdist_egg')
         # invoke the installation with zc.buildout
 
+        dist = pyzinc_build_path + '/dist/'
         zc.buildout.easy_install.install(
             specs=['pyzinc'], 
             dest=self.buildout['buildout']['develop-eggs-directory'],
-            links=['file://' + pyzinc_build_path + '/dist/'],
-            index=None,
+            links=['file://' + dist],
+            # sledgehammer this stupid crap in because find_links doesn't
+            # actuall work if package exists in pypi
+            index=dist,
             executable=self.executable,
             path=[self.buildout['buildout']['eggs-directory']]
         )
