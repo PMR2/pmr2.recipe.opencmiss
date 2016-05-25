@@ -6,6 +6,7 @@ import os.path
 import re
 import shutil
 import tempfile
+from subprocess import check_output
 
 import zc.buildout.easy_install
 
@@ -27,6 +28,7 @@ class Recipe(object):
     def __init__(self, buildout, name, options):
         self.buildout, self.name, self.options = buildout, name, options
         directory = buildout['buildout']['directory']
+        self.git_checkout = options.get('git-checkout', 'devel')
 
         environ = []
         for token in self.options.get('environment', '').split():
@@ -94,102 +96,41 @@ class Recipe(object):
             raise
 
     def make(self, tmp, dest):
-        # Utilities
-        utils_root = os.path.join(tmp, 'utilities')
-        utils_build_path = os.path.join(tmp, 'utilities', 'manage', 'build')
-        utils_mod_path = os.path.join(utils_root, 'cmake-2.8', 'Modules')
-        os.makedirs(utils_build_path)
-        os.chdir(utils_build_path)
-        system('svn co '
-            'https://svn.physiomeproject.org/svn/opencmiss/utilities/trunk/ '
-            '.. --depth=files')
-        system('cmake ..')
-        system('cmake --build .')
+        # Checkout
+        os.chdir(tmp)
+        build_path = os.path.join(tmp, 'manage', 'build')
+        system('git clone https://github.com/OpenCMISS/manage')
+        os.chdir(build_path)
+        system('git checkout %s' % self.git_checkout)
+        cmake_bin = 'cmake'
 
-        # Utilities
-        deps_root = os.path.join(tmp, 'dependencies')
-        deps_build_path = os.path.join(tmp, 'dependencies', 'manage', 'build')
-        deps_install_path = os.path.join(tmp, 'dependencies', 'install')
-        os.makedirs(deps_build_path)
-        os.chdir(deps_build_path)
-        system('svn co '
-            'https://svn.physiomeproject.org/svn/opencmiss/dependencies/trunk/'
-            ' .. --depth=files')
-        system('cmake '
-            '-DDEPENDENCIES_ROOT=%s '
-            '-DDEPENDENCIES_MODULE_PATH=%s '
-            '-DDEPENDENCIES_SVN_REPO='
-                'https://svn.physiomeproject.org/svn/'
-                    'opencmiss/dependencies/trunk/ ..' % (
-                deps_root,
-                utils_mod_path
-            )
-        )
-        system('cmake --build .')
+        # Check cmake version
+        v = tuple(check_output(['cmake', '--version']).splitlines()[0].rsplit(
+            ' ', 1)[-1].split('.'))
+        if v < ('3', '4'):
+            # build cmake>=3.4 and restart cmake with the built version.
+            system('cmake ..')
+            system('make cmake')
+            cmake_bin = os.path.join(
+                '..', '..', 'install', 'utilities', 'cmake', 'bin', 'cmake')
 
-        # Zinc Library
-        zinc_root = os.path.join(tmp, 'zinc')
-        os.makedirs(zinc_root)
+        fd = open('OpenCMISSLocalConfig.cmake', 'a')
+        fd.write('\n')
+        #fd.write('set(BUILD_TESTS "NO")\n')
+        fd.write('set(OC_PYTHON_BINDINGS_USE_VIRTUALENV "NO")\n')
+        fd.write('set(OC_USE_ARCHITECTURE_PATH "NO")\n')
+        fd.write('set(OPENCMISS_INSTALL_ROOT "%s")\n' % dest)
+        fd.close()
+        system(cmake_bin + ' ..')
+        system('make install')
+        # ``make install`` will also install the develop-egg correctly
+        # into develop-eggs.
 
-        zinc_src_path = os.path.join(tmp, 'zinc', 'library')
-        zinc_lib_build_path = os.path.join(tmp, 'build', 'zinc', 'library')
-        os.makedirs(zinc_lib_build_path)
-        system('svn co '
-            'https://svn.physiomeproject.org/svn/cmiss/zinc/library/trunk/ ' +
-            zinc_src_path)
-        os.chdir(zinc_lib_build_path)
-        system('cmake '
-            '-DZINC_DEPENDENCIES_INSTALL_PREFIX=%s '
-            '-DZINC_MODULE_PATH=%s '
-            '-DCMAKE_INSTALL_PREFIX:PATH=%s '
-            '-DCMAKE_INSTALL_RPATH:PATH=%s/lib '
-            '%s' % (
-                deps_install_path,
-                utils_mod_path,
-                dest,
-                dest,
-                zinc_src_path,
-            )
-        )
-        system('cmake --build .')
-        system('cmake -P cmake_install.cmake')
-
-        # Zinc Python Bindings
-
-        pyzinc_co_path = os.path.join(zinc_root, 'bindings')
-        pyzinc_src_path = os.path.join(pyzinc_co_path, 'python')
-        pyzinc_build_path = os.path.join(tmp, 'build', 'zinc', 'bindings')
-        os.makedirs(pyzinc_build_path)
-        system('svn co '
-            'https://svn.physiomeproject.org/svn/cmiss/zinc/bindings/trunk/ ' +
-            pyzinc_co_path)
-        os.chdir(pyzinc_build_path)
-        system('cmake '
-            '-DZinc_DIR=%s/lib '
-            '-DPYZINC_MODULE_PATH=%s '
-            '-DCMAKE_INSTALL_PREFIX:PATH=%s '
-            '%s' % (
-                dest,
-                utils_mod_path,
-                dest,
-                pyzinc_src_path,
-            )
-        )
-        system('cmake --build .')
-        # prepare an egg for distribution
-        system('python setup.py bdist_egg')
-        # invoke the installation with zc.buildout
-
-        dist = pyzinc_build_path + '/dist/'
-        zc.buildout.easy_install.install(
-            specs=['pyzinc'], 
-            dest=self.buildout['buildout']['develop-eggs-directory'],
-            links=['file://' + dist],
-            # sledgehammer this stupid crap in because find_links doesn't
-            # actuall work if package exists in pypi
-            index=dist,
-            executable=self.executable,
-            path=[self.buildout['buildout']['eggs-directory']]
-        )
+        # If the actual egg is wanted
+        # py_path = os.path.join(dest, 'release', 'python', 'RELEASE')
+        # os.chdir(py_path)
+        # system('python setup.py bdist_egg')
+        # Egg in this dir:
+        # py_path = os.path.join(py_path, 'dist')
 
         return None
