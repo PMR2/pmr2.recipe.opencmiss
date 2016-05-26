@@ -145,11 +145,22 @@ class Recipe(object):
         # ``make install`` will also install the develop-egg correctly
         # into develop-eggs.
 
-        # If the actual egg is wanted
-        # py_path = os.path.join(dest, 'release', 'python', 'RELEASE')
-        # os.chdir(py_path)
-        # system('python setup.py bdist_egg')
+        # Build the actual egg.
+        py_path = os.path.join(dest, 'release', 'python', 'RELEASE')
+        os.chdir(py_path)
+        system('python setup.py bdist_egg')
         # Egg in this dir:
-        # py_path = os.path.join(py_path, 'dist')
+        dist = os.path.join(py_path, 'dist')
+
+        zc.buildout.easy_install.install(
+            specs=['zinc'],
+            dest=self.buildout['buildout']['develop-eggs-directory'],
+            links=['file://' + dist],
+            # sledgehammer this stupid crap in because find_links doesn't
+            # actuall work if package exists in pypi
+            index=dist,
+            executable=self.executable,
+            path=[self.buildout['buildout']['eggs-directory']]
+        )
 
         return None
