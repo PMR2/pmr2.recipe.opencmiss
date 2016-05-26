@@ -12,6 +12,7 @@ import zc.buildout.easy_install
 
 almost_environment_setting = re.compile('\w+=').match
 not_starting_with_digit = re.compile('\D').match
+cmake_option_check = almost_environment_setting
 
 def system(c):
     if os.system(c):
@@ -30,6 +31,7 @@ class Recipe(object):
 
     def __init__(self, buildout, name, options):
         self.buildout, self.name, self.options = buildout, name, options
+        logger = logging.getLogger(self.name)
         directory = buildout['buildout']['directory']
         self.git_checkout = options.get('git-checkout', 'devel')
 
@@ -48,6 +50,20 @@ class Recipe(object):
             self.environ = dict([x.split('=', 1) for x in environ])
         else:
             self.environ = {}
+
+        cmake_options = {}
+        for token in self.options.get('cmake-options', '').splitlines():
+            token = token.strip()
+            if (cmake_option_check(token)):
+                k, v = token.split('=', 1)
+                cmake_options['-D' + k.upper()] = '"%s"' % v.replace(
+                    '\"', '\\"')
+            else:
+                if token:
+                    logger.info('cmake-options %s ignored.' % (token))
+
+        self.cmake_option_str = ' '.join(
+            '%s=%s' % t for t in cmake_options.items())
 
         location = os.path.join(options.get(
                 'location', buildout['buildout']['parts-directory']), name)
@@ -124,7 +140,7 @@ class Recipe(object):
         fd.write('set(OC_USE_ARCHITECTURE_PATH "NO")\n')
         fd.write('set(OPENCMISS_INSTALL_ROOT "%s")\n' % dest)
         fd.close()
-        system(cmake_bin + ' ..')
+        system(cmake_bin + ' ' + self.cmake_option_str + ' ..')
         system('make install')
         # ``make install`` will also install the develop-egg correctly
         # into develop-eggs.
