@@ -10,6 +10,9 @@ from subprocess import check_output
 
 import zc.buildout.easy_install
 
+almost_environment_setting = re.compile('\w+=').match
+not_starting_with_digit = re.compile('\D').match
+
 def system(c):
     if os.system(c):
         raise SystemError("Failed", c)
